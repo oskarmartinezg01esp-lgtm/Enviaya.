@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-bg: #05070d;
+  --color-panel: #0b111c;
+  --color-panel-2: #0f1726;
+  --color-line: rgb(148 163 184 / 0.12);
+  --color-electric: #00afff;
+  --color-cyan: #00e5ff;
+  --color-deep: #0066ff;
+  --color-violet: #7c3aed;
+  --color-ink: #ffffff;
+  --color-muted: #94a3b8;
+  --color-success: #22d3a6;
+  --color-danger: #ff4d6d;
+  --color-warning: #fbbf24;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-xl2: 1.25rem;
+  --shadow-glow: 0 0 0 1px rgb(0 175 255 / 0.25), 0 10px 40px -10px rgb(0 175 255 / 0.45);
+
+  --animate-float: float 8s ease-in-out infinite;
+  --animate-shimmer: shimmer 2.4s linear infinite;
+  --animate-fade-up: fade-up 0.5s ease-out both;
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+  @keyframes shimmer {
+    from { background-position: -200% 0; }
+    to { background-position: 200% 0; }
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Iluminación ambiental muy sutil */
+.ambient {
+  background:
+    radial-gradient(60rem 40rem at 50% -10%, rgb(0 102 255 / 0.16), transparent 60%),
+    radial-gradient(40rem 30rem at 100% 100%, rgb(124 58 237 / 0.10), transparent 60%),
+    radial-gradient(30rem 30rem at 0% 80%, rgb(0 229 255 / 0.06), transparent 60%),
+    var(--color-bg);
+}
+
+.glass {
+  background: linear-gradient(180deg, rgb(15 23 38 / 0.72), rgb(11 17 28 / 0.62));
+  border: 1px solid var(--color-line);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.glass-strong {
+  background: rgb(11 17 28 / 0.86);
+  border: 1px solid var(--color-line);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, #ffffff 0%, #bfefff 40%, #00e5ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ring-glow {
+  box-shadow: var(--shadow-glow);
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+::selection {
+  background: rgb(0 175 255 / 0.35);
+}
+
+/* Safe areas para PWA instalada */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

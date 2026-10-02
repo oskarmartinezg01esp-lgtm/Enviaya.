@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cortana
+      POSTGRES_PASSWORD: cortana
+      POSTGRES_DB: cortana
+    ports:
+      - "5432:5432"
+    volumes:
+      - cortana-db:/var/lib/postgresql/data
+volumes:
+  cortana-db:

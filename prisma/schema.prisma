@@ -1,0 +1,413 @@
+// CORTANA — Pedidos por voz
+// Todos los importes se guardan en céntimos (Int) para evitar errores de coma flotante.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDIENTE
+  CONFIRMADO
+  PREPARANDO
+  LISTO
+  EN_CAMINO
+  ENTREGADO
+  CANCELADO
+}
+
+enum PaymentStatus {
+  PENDING
+  REQUIRES_CONFIRMATION
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethodType {
+  CARD
+  APPLE_PAY
+  GOOGLE_PAY
+  CASH
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum NotificationChannel {
+  IN_APP
+  PUSH
+  EMAIL
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  READ
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  googleId      String?   @unique
+  name          String
+  phone         String?
+  role          Role      @default(CUSTOMER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile        Profile?
+  sessions       Session[]
+  addresses      Address[]
+  cart           Cart?
+  orders         Order[]
+  paymentMethods PaymentMethod[]
+  conversations  Conversation[]
+  voiceSessions  VoiceSession[]
+  notifications  Notification[]
+  preferences    Preference[]
+  adminUser      AdminUser?
+  auditLogs      AuditLog[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  // SHA-256 del token; el token en claro solo vive en la cookie httpOnly.
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Profile {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatarUrl            String?
+  language             String   @default("es-ES")
+  voice                String   @default("alloy")
+  voiceSpeed           Float    @default(1.0)
+  autoSpeak            Boolean  @default(true)
+  memoryEnabled        Boolean  @default(true)
+  notifyPush           Boolean  @default(true)
+  notifyEmail          Boolean  @default(true)
+  notifyWhatsapp       Boolean  @default(false)
+  saveConversations    Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
+}
+
+model Address {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label        String   // "Casa", "Trabajo"...
+  line1        String
+  line2        String?
+  city         String
+  postalCode   String
+  province     String?
+  country      String   @default("ES")
+  instructions String?
+  lat          Float?
+  lng          Float?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders       Order[]
+
+  @@index([userId])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  description String?
+  icon        String?
+  sortOrder   Int       @default(0)
+  active      Boolean   @default(true)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id            String           @id @default(cuid())
+  slug          String           @unique
+  name          String
+  description   String
+  imageUrl      String?
+  priceCents    Int
+  categoryId    String
+  category      Category         @relation(fields: [categoryId], references: [id])
+  stock         Int?             // null = ilimitado
+  available     Boolean          @default(true)
+  ingredients   String[]
+  allergens     String[]
+  tags          String[]         // "pollo", "picante", "vegano", "oferta", "combo"...
+  synonyms      String[]         // términos de búsqueda por voz ("burger", "hamburguesa")
+  popularity    Int              @default(0)
+  // Opciones configurables: [{ id, name, type: "remove"|"extra", priceCents }]
+  options       Json             @default("[]")
+  isCombo       Boolean          @default(false)
+  isOffer       Boolean          @default(false)
+  isFeatured    Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  variants      ProductVariant[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+
+  @@index([categoryId])
+}
+
+model ProductVariant {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name       String   // "Mediana", "Grande", "33 cl"...
+  priceCents Int      // precio final de la variante
+  isDefault  Boolean  @default(false)
+  sortOrder  Int      @default(0)
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([productId])
+}
+
+model Cart {
+  id                String     @id @default(cuid())
+  userId            String     @unique
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addressId         String?
+  paymentMethodId   String?
+  notes             String?
+  items             CartItem[]
+  updatedAt         DateTime   @updatedAt
+}
+
+model CartItem {
+  id          String          @id @default(cuid())
+  cartId      String
+  cart        Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id])
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity    Int
+  // Modificaciones: { remove: ["cebolla"], extra: ["queso extra"], notes: "" }
+  modifiers   Json            @default("{}")
+  unitCents   Int             // precio unitario con extras, calculado en servidor
+  createdAt   DateTime        @default(now())
+
+  @@index([cartId])
+}
+
+model Order {
+  id                 String       @id @default(cuid())
+  number             Int          @unique @default(autoincrement())
+  userId             String
+  user               User         @relation(fields: [userId], references: [id])
+  status             OrderStatus  @default(PENDIENTE)
+  addressId          String?
+  address            Address?     @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  // Copia inmutable de la dirección en el momento del pedido
+  addressSnapshot    Json?
+  subtotalCents      Int
+  deliveryFeeCents   Int          @default(0)
+  totalCents         Int
+  notes              String?
+  estimatedMinutes   Int?
+  confirmedAt        DateTime?
+  preparingAt        DateTime?
+  readyAt            DateTime?
+  shippedAt          DateTime?
+  deliveredAt        DateTime?
+  cancelledAt        DateTime?
+  source             String       @default("voice") // voice | text | ui | repeat
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  items              OrderItem[]
+  payments           Payment[]
+  notifications      Notification[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id])
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  name        String          // snapshot
+  variantName String?
+  quantity    Int
+  unitCents   Int
+  modifiers   Json            @default("{}")
+
+  @@index([orderId])
+}
+
+// Método de pago tokenizado. NUNCA se guarda el PAN completo: solo el id del proveedor.
+model PaymentMethod {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              PaymentMethodType
+  provider          String            @default("stripe")
+  providerRef       String?           // pm_xxx de Stripe
+  brand             String?
+  last4             String?
+  expMonth          Int?
+  expYear           Int?
+  isDefault         Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+
+  payments          Payment[]
+
+  @@index([userId])
+}
+
+model Payment {
+  id               String         @id @default(cuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethodId  String?
+  paymentMethod    PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  provider         String         @default("stripe")
+  providerRef      String?        // payment_intent id
+  amountCents      Int
+  currency         String         @default("EUR")
+  status           PaymentStatus  @default(PENDING)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([orderId])
+}
+
+model Conversation {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String?
+  // Estado conversacional (acción pendiente de confirmación, último producto mencionado...)
+  state      Json      @default("{}")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  messages   Message[]
+  voiceSessions VoiceSession[]
+
+  @@index([userId])
+}
+
+model Message {
+  id              String       @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            MessageRole
+  content         String
+  toolCalls       Json?
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+
+  @@index([conversationId])
+}
+
+model VoiceSession {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  provider        String        // "openai-realtime" | "browser"
+  model           String?
+  startedAt       DateTime      @default(now())
+  endedAt         DateTime?
+  durationMs      Int?
+  metadata        Json?
+
+  @@index([userId])
+}
+
+model Notification {
+  id         String              @id @default(cuid())
+  userId     String
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId    String?
+  order      Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  channel    NotificationChannel @default(IN_APP)
+  event      String              // order.confirmed, order.preparing...
+  title      String
+  body       String
+  status     NotificationStatus  @default(QUEUED)
+  readAt     DateTime?
+  createdAt  DateTime            @default(now())
+
+  @@index([userId, readAt])
+}
+
+// Memoria de CORTANA: preferencias clave/valor que el usuario puede borrar.
+model Preference {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key        String   // preferredDrink, dislikes, diet...
+  value      String
+  source     String   @default("conversation")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, key])
+}
+
+model AdminUser {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions String[] @default(["orders", "products", "categories", "customers", "analytics"])
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // order.create, product.update, ai.tool.createOrder ...
+  entity     String
+  entityId   String?
+  data       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
